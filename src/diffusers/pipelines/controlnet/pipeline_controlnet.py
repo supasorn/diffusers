@@ -341,6 +341,7 @@ class StableDiffusionControlNetPipeline(
                 Number of layers to be skipped from CLIP while computing the prompt embeddings. A value of 1 means that
                 the output of the pre-final layer will be used for computing the prompt embeddings.
         """
+        # print("PEFT", USE_PEFT_BACKEND)
         # set lora scale so that monkey patched LoRA
         # function of text encoder can correctly access it
         if lora_scale is not None and isinstance(self, LoraLoaderMixin):
@@ -920,6 +921,7 @@ class StableDiffusionControlNetPipeline(
         clip_skip: Optional[int] = None,
         callback_on_step_end: Optional[Callable[[int, int, Dict], None]] = None,
         callback_on_step_end_tensor_inputs: List[str] = ["latents"],
+        face_mask = None,
         **kwargs,
     ):
         r"""
@@ -1024,6 +1026,10 @@ class StableDiffusionControlNetPipeline(
 
         callback = kwargs.pop("callback", None)
         callback_steps = kwargs.pop("callback_steps", None)
+
+        # move face_mask to the same device
+        if face_mask is not None:
+            face_mask = face_mask.to(self._execution_device)
 
         if callback is not None:
             deprecate(
@@ -1260,6 +1266,21 @@ class StableDiffusionControlNetPipeline(
                     added_cond_kwargs=added_cond_kwargs,
                     return_dict=False,
                 )[0]
+
+                if True:
+                    noise_pred2 = self.unet(
+                        latent_model_input,
+                        t,
+                        encoder_hidden_states=prompt_embeds,
+                        timestep_cond=timestep_cond,
+                        cross_attention_kwargs={"scale": 0},
+                        down_block_additional_residuals=down_block_res_samples,
+                        mid_block_additional_residual=mid_block_res_sample,
+                        added_cond_kwargs=added_cond_kwargs,
+                        return_dict=False,
+                    )[0]
+
+                    noise_pred = noise_pred * face_mask + noise_pred2 * (1-face_mask)
 
                 # perform guidance
                 if self.do_classifier_free_guidance:
