@@ -897,6 +897,7 @@ class StableDiffusionControlNetPipeline(
     def __call__(
         self,
         prompt: Union[str, List[str]] = None,
+        prompt_bg: Union[str, List[str]] = None,
         image: PipelineImageInput = None,
         height: Optional[int] = None,
         width: Optional[int] = None,
@@ -904,6 +905,7 @@ class StableDiffusionControlNetPipeline(
         timesteps: List[int] = None,
         guidance_scale: float = 7.5,
         negative_prompt: Optional[Union[str, List[str]]] = None,
+        negative_prompt_bg: Optional[Union[str, List[str]]] = None,
         num_images_per_prompt: Optional[int] = 1,
         eta: float = 0.0,
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
@@ -1111,11 +1113,24 @@ class StableDiffusionControlNetPipeline(
             lora_scale=text_encoder_lora_scale,
             clip_skip=self.clip_skip,
         )
+
+        prompt_embeds_bg, negative_prompt_embeds_bg = self.encode_prompt(
+            prompt_bg,
+            device,
+            num_images_per_prompt,
+            self.do_classifier_free_guidance,
+            negative_prompt_bg,
+            prompt_embeds=None,
+            negative_prompt_embeds=None,
+            lora_scale=text_encoder_lora_scale,
+            clip_skip=self.clip_skip,
+        )
         # For classifier free guidance, we need to do two forward passes.
         # Here we concatenate the unconditional and text embeddings into a single batch
         # to avoid doing two forward passes
         if self.do_classifier_free_guidance:
             prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
+            prompt_embeds_bg = torch.cat([negative_prompt_embeds_bg, prompt_embeds_bg])
 
         if ip_adapter_image is not None:
             image_embeds = self.prepare_ip_adapter_image_embeds(
@@ -1271,7 +1286,7 @@ class StableDiffusionControlNetPipeline(
                     noise_pred2 = self.unet(
                         latent_model_input,
                         t,
-                        encoder_hidden_states=prompt_embeds,
+                        encoder_hidden_states=prompt_embeds_bg,
                         timestep_cond=timestep_cond,
                         cross_attention_kwargs={"scale": 0},
                         down_block_additional_residuals=down_block_res_samples,
